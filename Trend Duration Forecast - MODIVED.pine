@@ -1,0 +1,507 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © ChartPrime
+
+//@version=6
+indicator("Trend Duration Forecast - NODIVED", overlay = true, max_labels_count = 500, max_lines_count = 500, max_boxes_count = 300)
+
+// --------------------------------------------------------------------------------------------------------------------}
+// 📌 𝙐𝙎𝙀𝙍 𝙄𝙉𝙋𝙐𝙏𝙎
+// --------------------------------------------------------------------------------------------------------------------{
+
+length = input.int(
+     50,
+     title = "Kehalusan Garis Tren (HMA Length)",
+     tooltip = "Mengatur seberapa halus garis tren (Hull Moving Average). Angka lebih besar membuat garis lebih mulus dan tidak mudah terkecoh oleh pergerakan kecil palsu (noise), namun sedikit lebih lambat merespons."
+ )
+
+trendLength = input.int(
+     3,
+     title = "Kepekaan Deteksi Tren",
+     tooltip = "Mengatur seberapa cepat indikator mengenali perubahan arah tren dari naik ke turun atau sebaliknya. Angka kecil lebih sensitif/cepat, angka besar lebih stabil."
+ )
+
+samples = input.int(
+     10,
+     title = "Jumlah Catatan Tren Masa Lalu",
+     minval = 2,
+     tooltip = "Berapa banyak riwayat durasi tren masa lalu yang disimpan untuk memperkirakan rata-rata panjang tren berikutnya."
+ )
+
+coloUP = input.color(color.rgb(18, 228, 158), "Warna Tren Naik ↑", inline = "col")
+coloDN = input.color(color.rgb(236, 86, 16), "Warna Tren Turun ↓", inline = "col")
+
+// ---- 🔧 ENHANCEMENT INPUTS ----
+grp_enhance = "🔧 FITUR TAMBAHAN & ANALISA ADVANCED"
+
+// Feature 1: ADX Trend Strength Meter
+showADX = input.bool(
+     true,
+     title = "Tampilkan Meteran Kekuatan Tren (ADX)",
+     group = grp_enhance,
+     tooltip = "Menampilkan tabel di pojok kanan atas yang mengukur apakah tren saat ini sedang kuat bertenaga atau melemah/sideways."
+ )
+adxLen = input.int(
+     14,
+     title = "Periode Perhitungan ADX",
+     group = grp_enhance,
+     tooltip = "Periode waktu untuk menghitung kekuatan arah tren. Standar yang disarankan adalah 14."
+ )
+adxSmooth = input.int(
+     14,
+     title = "Kehalusan Garis ADX",
+     group = grp_enhance,
+     tooltip = "Pelembutan angka ADX agar tidak terlalu gampang melonjak tiba-tiba. Standar adalah 14."
+ )
+
+// Feature 2: Forecast Confidence %
+showConfidence = input.bool(
+     true,
+     title = "Tingkat Akurasi Perkiraan Tren",
+     group = grp_enhance,
+     tooltip = "Menghitung konsistensi durasi tren di masa lalu. Semakin konsisten durasinya, semakin tinggi tingkat akurasi perkiraan berapa lama tren akan bertahan."
+ )
+
+// Feature 3: Multi-Timeframe Trend Confirmation
+showMTF = input.bool(
+     true,
+     title = "Konfirmasi Tren Timeframe Lebih Besar (MTF)",
+     group = grp_enhance,
+     tooltip = "Memeriksa apakah arah tren di timeframe (waktu chart) yang lebih besar juga searah. Tren yang searah dengan timeframe besar jauh lebih aman dan akurat."
+ )
+mtfTF1 = input.string(
+     "15",
+     title = "Timeframe Besar 1 (Contoh: 15m)",
+     options = ["1", "3", "5", "15", "30", "60", "120", "240", "D", "W", "M"],
+     group = grp_enhance,
+     tooltip = "Timeframe lebih besar pertama yang dicek untuk memastikan arah tren."
+ )
+mtfTF2 = input.string(
+     "60",
+     title = "Timeframe Besar 2 (Contoh: 1 Jam)",
+     options = ["1", "3", "5", "15", "30", "60", "120", "240", "D", "W", "M"],
+     group = grp_enhance,
+     tooltip = "Timeframe lebih besar kedua yang dicek untuk memastikan arah tren."
+ )
+
+// Feature 4: Trend Exhaustion Warning
+showExhaustion = input.bool(
+     true,
+     title = "Peringatan Tren Kelelahan (Exhaustion)",
+     group = grp_enhance,
+     tooltip = "Memberikan peringatan visual (ikon ⚠️/🚨 dan warna garis berubah) jika durasi tren sudah berlangsung jauh lebih lama dari biasanya, menandakan harga mulai lelah dan rawan berbalik arah."
+ )
+exhaustWarn = input.float(
+     1.5,
+     title = "Batas Peringatan Waspada (x Rata-rata)",
+     group = grp_enhance,
+     tooltip = "Jika durasi tren melebihi 1.5 kali lipat dari rata-rata biasanya, muncul ikon ⚠️ Waspada dan garis menjadi oranye."
+ )
+exhaustDanger = input.float(
+     2.0,
+     title = "Batas Peringatan Bahaya (x Rata-rata)",
+     group = grp_enhance,
+     tooltip = "Jika durasi tren melebihi 2 kali lipat dari rata-rata biasanya, muncul ikon 🚨 Bahaya dan garis menjadi merah karena sangat rawan berbalik arah."
+ )
+
+// Feature 5: Visual Trend Duration Progress Bar
+showProgress = input.bool(
+     true,
+     title = "Tampilkan Progres Bar Durasi Tren",
+     group = grp_enhance,
+     tooltip = "Menampilkan tabel di pojok kiri bawah berisi bar visual (misal: ████░░ 45%) yang menunjukkan seberapa jauh perjalanan tren saat ini dibandingkan rata-rata kemampuannya."
+ )
+
+// Feature 6: Support/Resistance Zones
+showSR = input.bool(
+     true,
+     title = "Garis Batas Pantulan (Support/Resistance)",
+     group = grp_enhance,
+     tooltip = "Menggambar garis putus-putus otomatis di titik di mana tren sebelumnya berakhir. Garis ini berfungsi sebagai batas pertahanan (Support) atau batas atap (Resistance)."
+ )
+srColor = input.color(
+     color.gray,
+     title = "Warna Garis Support/Resistance",
+     group = grp_enhance,
+     tooltip = "Warna garis batas pantulan yang digambar saat terjadi transisi tren."
+ )
+
+var trend = bool(na)
+var TrendCount = 0
+
+var bullishCount = array.new<int>()
+var bearishCount = array.new<int>()
+
+var TrendUP = label(na)
+var TrendDN = label(na)
+var LengthLine = line(na)
+var LabelProbLen = label(na)
+
+// Feature 6: Persistent S/R line array
+var srLines = array.new<line>()
+var srLabels = array.new<label>()
+
+// Feature 4: Persistent exhaustion warning label
+var exhaustLabel = label(na)
+
+
+// --------------------------------------------------------------------------------------------------------------------}
+// 📌 𝙄𝙉𝘿𝙄𝘾𝘼𝙏𝙊𝙍 𝘾𝘼𝙇𝘾𝙐𝙇𝘼𝙏𝙄𝙊𝙉𝙎
+// --------------------------------------------------------------------------------------------------------------------{
+
+series float hma = ta.hma(close, length)
+
+// ---- Feature 1: ADX Calculation ----
+[diPlus, diMinus, adxValue] = ta.dmi(adxLen, adxSmooth)
+
+// ---- Feature 3: Multi-Timeframe HMA (must be at global scope) ----
+hmaMTF1 = request.security(syminfo.tickerid, mtfTF1, ta.hma(close, length), lookahead = barmerge.lookahead_off)
+hmaMTF2 = request.security(syminfo.tickerid, mtfTF2, ta.hma(close, length), lookahead = barmerge.lookahead_off)
+
+trendMTF1 = ta.rising(hmaMTF1, trendLength)
+trendMTF2 = ta.rising(hmaMTF2, trendLength)
+bearMTF1  = ta.falling(hmaMTF1, trendLength)
+bearMTF2  = ta.falling(hmaMTF2, trendLength)
+
+mtfAllUp   = trend and trendMTF1 and trendMTF2
+mtfAllDown = (not trend) and bearMTF1 and bearMTF2
+mtfAligned = mtfAllUp or mtfAllDown
+
+if barstate.isconfirmed
+    if ta.rising(hma, trendLength) 
+        trend := true
+    if ta.falling(hma, trendLength)
+        trend := false
+
+if trend or not trend 
+    TrendCount += 1
+
+// ---- Feature 2: Confidence Calculation ----
+f_calcCV(arr) =>
+    float cv = na
+    if arr.size() >= 2
+        float avg_val = arr.avg()
+        float stdev_val = arr.stdev()
+        cv := avg_val > 0 ? (stdev_val / avg_val) * 100 : na
+    cv
+
+bullCV = f_calcCV(bullishCount)
+bearCV = f_calcCV(bearishCount)
+
+f_confLabel(cv) =>
+    string result = na
+    if na(cv)
+        result := "⏳ N/A"
+    else if cv < 20
+        result := "🟢 Tinggi (Akurat)"
+    else if cv < 40
+        result := "🟡 Sedang"
+    else if cv < 60
+        result := "🟠 Rendah"
+    else
+        result := "🔴 Sangat Rendah"
+    result
+
+// ---- Feature 4: Exhaustion thresholds ----
+float bullAvg = bullishCount.size() > 0 ? bullishCount.avg() : na
+float bearAvg = bearishCount.size() > 0 ? bearishCount.avg() : na
+
+float currentAvg = trend ? bullAvg : bearAvg
+bool isExhaustWarn   = not na(currentAvg) and showExhaustion and TrendCount > currentAvg * exhaustWarn
+bool isExhaustDanger = not na(currentAvg) and showExhaustion and TrendCount > currentAvg * exhaustDanger
+
+// ---- Feature 7: Alert booleans (no var — must reset each bar) ----
+bool alertBullish       = trend and trend != trend[1]
+bool alertBearish       = (not trend) and trend != trend[1]
+bool alertExhaustWarn   = isExhaustWarn and not (not na(currentAvg) and showExhaustion and TrendCount[1] > currentAvg * exhaustWarn)
+bool alertExhaustDanger = isExhaustDanger and not (not na(currentAvg) and showExhaustion and TrendCount[1] > currentAvg * exhaustDanger)
+
+if trend != trend[1]
+    LengthLine.delete()
+    LabelProbLen.delete()
+    TrendUP.set_tooltip("")
+    TrendDN.set_tooltip("")
+
+    // ---- Feature 4: Delete previous exhaustion label on new trend ----
+    exhaustLabel.delete()
+
+    // ---- Feature 6: S/R Zones ----
+    if showSR
+        srLine = line.new(
+             bar_index, hma[1], bar_index + 1, hma[1],
+             color = srColor,
+             style = line.style_dotted,
+             extend = extend.right,
+             width = 1
+         )
+        srLines.push(srLine)
+
+        string srText = trend ? "↓ End" : "↑ End"
+        srLbl = label.new(
+             bar_index, hma[1], srText,
+             style = label.style_none,
+             textcolor = srColor,
+             size = size.tiny
+         )
+        srLabels.push(srLbl)
+
+        // Keep max 10 S/R lines
+        if srLines.size() > 10
+            srLines.shift().delete()
+        if srLabels.size() > 10
+            srLabels.shift().delete()
+
+    if trend 
+        bearishCount.push(TrendCount)
+
+        // Feature 2: Confidence text for bullish
+        string confText = showConfidence ? "\nAkurasi: " + f_confLabel(bullCV) : ""
+
+        TrendUP := label.new(
+             bar_index, hma,
+             "Tren Naik ↑\nPerkiraan Bertahan: " + str.tostring(bullishCount.avg(), "##") + " Bar" + confText,
+             color = color.new(coloUP, 100),
+             textcolor = coloUP,
+             style = label.style_label_up,
+             tooltip = "Tren Naik Baru terdeteksi!\nPerkiraan Bertahan: estimasi berapa candle/bar lagi tren ini akan berlangsung berdasarkan rata-rata sebelumnya."
+         )
+        TrendDN.set_text("Tren Turun ↓\nDurasi Berjalan: " + str.tostring(TrendCount) + " Bar\n")
+        LengthLine := line.new(
+             bar_index - 1, hma[1], bar_index, hma[1],
+             color = chart.fg_color, style = line.style_arrow_right
+         )
+        LabelProbLen := label.new(
+             bar_index, hma[1], "",
+             style = label.style_label_up,
+             textcolor = chart.fg_color,
+             color = color.new(color.white, 100),
+             tooltip = "Perkiraan batas sejauh mana tren naik ini kemungkinan akan bertahan."
+         )
+    else 
+        bullishCount.push(TrendCount)
+
+        // Feature 2: Confidence text for bearish
+        string confText = showConfidence ? "\nAkurasi: " + f_confLabel(bearCV) : ""
+
+        TrendDN := label.new(
+             bar_index, hma,
+             "Tren Turun ↓\nPerkiraan Bertahan: " + str.tostring(bearishCount.avg(), "##") + " Bar" + confText,
+             color = color.new(coloDN, 100),
+             textcolor = coloDN,
+             style = label.style_label_down,
+             tooltip = "Tren Turun Baru terdeteksi!\nPerkiraan Bertahan: estimasi berapa candle/bar lagi tren ini akan berlangsung berdasarkan rata-rata sebelumnya."
+         )
+        TrendUP.set_text("\nDurasi Berjalan: " + str.tostring(TrendCount) + " Bar\nTren Naik ↑")
+        LengthLine := line.new(
+             bar_index - 1, hma[1], bar_index, hma[1],
+             color = chart.fg_color, style = line.style_arrow_right
+         )
+        LabelProbLen := label.new(
+             bar_index, hma[1], "",
+             style = label.style_label_down,
+             textcolor = chart.fg_color,
+             color = color.new(color.white, 100),
+             tooltip = "Perkiraan batas sejauh mana tren turun ini kemungkinan akan bertahan."
+         )
+
+    TrendCount := 0
+
+// DYNAMIC LABEL UPDATES
+if not trend
+    // Feature 4: Exhaustion suffix
+    string exhaustSuffix = ""
+    if showExhaustion
+        if isExhaustDanger
+            exhaustSuffix := "\n🚨 SANGAT LELAH (Rawan Balik)!"
+        else if isExhaustWarn
+            exhaustSuffix := "\n⚠️ Waspada (Mulai Lelah)"
+
+    TrendDN.set_text(
+         "Tren Turun ↓\nDurasi Berjalan: " + str.tostring(TrendCount) + " Bar" + exhaustSuffix)
+    LengthLine.set_x2(LengthLine.get_x1() + bearishCount.avg() + 1)
+    LabelProbLen.set_x(int(math.avg(LengthLine.get_x1(), LengthLine.get_x2())))
+    LabelProbLen.set_text(
+         "Perkiraan Panjang:\n" + str.tostring(bearishCount.avg(), "##") + " Bar"
+     )
+else 
+    // Feature 4: Exhaustion suffix
+    string exhaustSuffix = ""
+    if showExhaustion
+        if isExhaustDanger
+            exhaustSuffix := "\n🚨 SANGAT LELAH (Rawan Balik)!"
+        else if isExhaustWarn
+            exhaustSuffix := "\n⚠️ Waspada (Mulai Lelah)"
+
+    TrendUP.set_text(
+         "Tren Naik ↑\nDurasi Berjalan: " + str.tostring(TrendCount) + " Bar" + exhaustSuffix
+     )
+    LengthLine.set_x2(LengthLine.get_x1() + bullishCount.avg() + 1)
+    LabelProbLen.set_x(int(math.avg(LengthLine.get_x1(), LengthLine.get_x2())))
+    LabelProbLen.set_text(
+         "Perkiraan Panjang:\n" + str.tostring(bullishCount.avg(), "##") + " Bar"
+     )
+
+// ---- Feature 4: Draw exhaustion warning label on chart ----
+if showExhaustion and (isExhaustWarn or isExhaustDanger)
+    // Only create label once when crossing threshold
+    if isExhaustDanger and not (not na(currentAvg) and TrendCount[1] > currentAvg * exhaustDanger)
+        exhaustLabel.delete()
+        exhaustLabel := label.new(
+             bar_index, trend ? high : low,
+             "🚨",
+             style = trend ? label.style_label_down : label.style_label_up,
+             color = color.new(color.red, 70),
+             textcolor = color.red,
+             size = size.small,
+             tooltip = "BAHAYA KELELAHAN TREN: Durasi (" + str.tostring(TrendCount) + " bar) sudah melebihi " + str.tostring(exhaustDanger, "#.#") + "x rata-rata biasanya! Sangat berisiko berbalik arah."
+         )
+    else if isExhaustWarn and not isExhaustDanger and not (not na(currentAvg) and TrendCount[1] > currentAvg * exhaustWarn)
+        exhaustLabel.delete()
+        exhaustLabel := label.new(
+             bar_index, trend ? high : low,
+             "⚠️",
+             style = trend ? label.style_label_down : label.style_label_up,
+             color = color.new(color.orange, 70),
+             textcolor = color.orange,
+             size = size.small,
+             tooltip = "WASPADA KELELAHAN TREN: Durasi (" + str.tostring(TrendCount) + " bar) sudah melebihi " + str.tostring(exhaustWarn, "#.#") + "x rata-rata biasanya! Mulai hati-hati."
+         )
+
+if bullishCount.size() > samples
+    bullishCount.shift()
+if bearishCount.size() > samples
+    bearishCount.shift()
+
+
+
+// --------------------------------------------------------------------------------------------------------------------}
+// 📌 𝙑𝙄𝙎𝙐𝘼𝙇𝙄𝙕𝘼𝙏𝙄𝙊𝙉
+// --------------------------------------------------------------------------------------------------------------------{
+// Trend Color — Feature 4: Override with exhaustion colors
+TColor = trend ? coloUP : coloDN
+if showExhaustion
+    if isExhaustDanger
+        TColor := color.red
+    else if isExhaustWarn
+        TColor := color.orange
+
+plot(hma, "HMA", TColor, linewidth = 3)
+
+// ---- Feature 3: MTF Alignment Dot ----
+plotshape(
+     showMTF and mtfAligned ? hma : na,
+     title = "MTF Aligned",
+     style = shape.diamond,
+     location = location.absolute,
+     color = mtfAllUp ? coloUP : coloDN,
+     size = size.tiny
+ )
+
+// TREND LENGTH TABLE
+var tbl = table.new(position.bottom_right, 100, 100)
+if barstate.islast
+    for i = 0 to bullishCount.size() - 1
+        // Column numbers
+        tbl.cell(0, i + 1, str.tostring(i + 1), text_color = color.gray, tooltip = "Urutan catatan tren (1 = yang paling baru terjadi)")
+
+        // Bullish trend lengths
+        lenBull = bullishCount.get(i)
+        if i == 0
+            tbl.cell(1, i, "Tren Naik ↑ (Bar)", text_color = coloUP, tooltip = "Catatan berapa lama tren naik bertahan sebelumnya")
+        tbl.cell(1, i + 1, str.tostring(lenBull), text_color = chart.fg_color,
+             tooltip = "Durasi tren naik ke-" + str.tostring(i + 1) + " bertahan selama " + str.tostring(lenBull) + " bar")
+
+        // Bearish trend lengths
+        lenBear = bearishCount.get(i)
+        if i == 0
+            tbl.cell(2, i, "Tren Turun ↓ (Bar)", text_color = coloDN, tooltip = "Catatan berapa lama tren turun bertahan sebelumnya")
+        tbl.cell(2, i + 1, str.tostring(lenBear), text_color = chart.fg_color,
+             tooltip = "Durasi tren turun ke-" + str.tostring(i + 1) + " bertahan selama " + str.tostring(lenBear) + " bar")
+
+    // Average row at the end
+    tbl.cell(
+         1, bullishCount.size() + 1,
+         str.tostring(bullishCount.avg(), "##"),
+         text_color = coloUP,
+         tooltip = "Rata-rata durasi tren naik (" + str.tostring(bullishCount.avg(), "##") + " bar)"
+     )
+    tbl.cell(
+         2, bearishCount.size() + 1,
+         str.tostring(bearishCount.avg(), "##"),
+         text_color = coloDN,
+         tooltip = "Rata-rata durasi tren turun (" + str.tostring(bearishCount.avg(), "##") + " bar)"
+     )
+
+    // ---- Feature 2: Confidence row in existing table ----
+    if showConfidence
+        int confRow = bullishCount.size() + 2
+        tbl.cell(0, confRow, "Akurasi", text_color = color.gray, tooltip = "Tingkat akurasi perkiraan berapa lama tren akan bertahan berdasarkan konsistensi masa lalu")
+        tbl.cell(1, confRow, f_confLabel(bullCV), text_color = coloUP, tooltip = "Akurasi perkiraan tren naik — CV: " + str.tostring(bullCV, "#.#") + "%")
+        tbl.cell(2, confRow, f_confLabel(bearCV), text_color = coloDN, tooltip = "Akurasi perkiraan tren turun — CV: " + str.tostring(bearCV, "#.#") + "%")
+
+
+// ---- Feature 1: ADX Trend Strength Table (top_right) ----
+var adxTbl = table.new(position.top_right, 2, 4, bgcolor = color.new(chart.bg_color, 30), border_width = 1, border_color = color.new(color.gray, 70))
+if showADX and barstate.islast
+    // Row 0: ADX Strength
+    string adxIcon = ""
+    color adxClr = color.gray
+    if adxValue > 40
+        adxIcon := "🔥 Sangat Kuat"
+        adxClr := color.green
+    else if adxValue > 25
+        adxIcon := "💪 Cukup Kuat"
+        adxClr := color.yellow
+    else if adxValue > 15
+        adxIcon := "😐 Lemah / Sedang"
+        adxClr := color.orange
+    else
+        adxIcon := "💤 Datar (Sideways)"
+        adxClr := color.gray
+
+    adxTbl.cell(0, 0, "Kekuatan Tren (ADX)", text_color = chart.fg_color, text_size = size.small, tooltip = "Mengukur apakah pasar saat ini sedang bertenaga kuat atau datar/sideways tanpa peduli arah naik/turun")
+    adxTbl.cell(1, 0, str.tostring(adxValue, "#.#") + " " + adxIcon, text_color = adxClr, text_size = size.small, tooltip = "Nilai ADX: " + str.tostring(adxValue, "#.#") + " — angka di atas 25 artinya tren sedang kuat bertenaga")
+
+    // Row 1: Direction
+    string dirText = diPlus > diMinus ? "🟢 Pembeli (Bullish)" : "🔴 Penjual (Bearish)"
+    color dirClr   = diPlus > diMinus ? color.green : color.red
+    adxTbl.cell(0, 1, "Dominasi Arah", text_color = chart.fg_color, text_size = size.small, tooltip = "Siapa yang sedang menguasai pasar saat ini (Pembeli vs Penjual)")
+    adxTbl.cell(1, 1, dirText, text_color = dirClr, text_size = size.small, tooltip = "Kekuatan Pembeli (DI+) = " + str.tostring(diPlus, "#.#") + " | Kekuatan Penjual (DI-) = " + str.tostring(diMinus, "#.#"))
+
+    // ---- Feature 3: MTF row in ADX table ----
+    if showMTF
+        string mtfStatus = mtfAligned ? "✅ Searah (Aman)" : "⚠️ Beda Arah (Hati-Hati)"
+        color mtfClr = mtfAligned ? color.green : color.orange
+        adxTbl.cell(0, 2, "Tren Jangka Panjang (" + mtfTF1 + "/" + mtfTF2 + ")", text_color = chart.fg_color, text_size = size.small, tooltip = "Memeriksa apakah arah tren di timeframe lebih besar (" + mtfTF1 + " dan " + mtfTF2 + ") juga searah dengan chart saat ini")
+        adxTbl.cell(1, 2, mtfStatus, text_color = mtfClr, text_size = size.small, tooltip = "Jika semua timeframe searah = Aman & Akurat; jika beda arah = Rawan Terkeceoh / Hati-hati")
+
+
+// ---- Feature 5: Progress Bar Table (bottom_left) ----
+var progTbl = table.new(position.bottom_left, 2, 1, bgcolor = color.new(chart.bg_color, 30), border_width = 1, border_color = color.new(color.gray, 70))
+if showProgress and barstate.islast
+    float probLen = trend ? bullishCount.avg() : bearishCount.avg()
+    float pct = probLen > 0 ? (TrendCount / probLen) * 100 : 0
+    int filledBlocks = math.min(math.round(pct / 10), 10)
+    int emptyBlocks = math.max(10 - filledBlocks, 0)
+
+    string bar = ""
+    for i = 0 to filledBlocks - 1
+        bar := bar + "█"
+    for i = 0 to emptyBlocks - 1
+        bar := bar + "░"
+
+    color progClr = color.green
+    if pct > 100
+        progClr := color.red
+    else if pct >= 70
+        progClr := color.yellow
+
+    string trendDir = trend ? "↑" : "↓"
+    progTbl.cell(0, 0, trendDir + " Progres Perjalanan Tren", text_color = chart.fg_color, text_size = size.small, tooltip = "Menunjukkan seberapa jauh perjalanan tren saat ini dibandingkan rata-rata kemampuannya di masa lalu")
+    progTbl.cell(1, 0, bar + " " + str.tostring(pct, "#") + "%", text_color = progClr, text_size = size.small, tooltip = "Durasi saat ini: " + str.tostring(TrendCount) + " bar | Rata-rata kemampuan: " + str.tostring(probLen, "#.#") + " bar")
+
+
+// ---- Feature 7: Alert Conditions (global scope) ----
+alertcondition(alertBullish, title = "🔄 Tren Naik Baru Dimulai (Bullish Trend)", message = "Tren naik baru terdeteksi — garis HMA mulai berbelok naik.")
+alertcondition(alertBearish, title = "🔄 Tren Turun Baru Dimulai (Bearish Trend)", message = "Tren turun baru terdeteksi — garis HMA mulai berbelok turun.")
+alertcondition(alertExhaustWarn, title = "⚠️ Waspada: Tren Sudah Mulai Kelelahan (Exhaustion Warning)", message = "Perhatian: Durasi tren sudah jauh melebihi rata-rata biasanya. Mulai waspada daerah pembalikan arah.")
+alertcondition(alertExhaustDanger, title = "🚨 Bahaya: Tren Sangat Lelah & Rawan Berbalik Arah (Danger)", message = "Bahaya: Durasi tren sudah sangat panjang melebihi batas bahaya! Sangat berisiko tinggi terjadi pembalikan arah tiba-tiba.")
