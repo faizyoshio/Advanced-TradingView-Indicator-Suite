@@ -1,5 +1,10 @@
 // This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
-// © ChartPrime
+// © faizyoshio (Modified & Enhanced Indicator Suite: https://github.com/faizyoshio/Advanced-TradingView-Indicator-Suite)
+// © ChartPrime (Original Base Indicator: https://id.tradingview.com/script/L3SJFfAQ-Trend-Duration-Forecast-ChartPrime/)
+//
+// ATTRIBUTION NOTICE:
+// Under the terms of MPL 2.0 and TradingView House Rules, any reuse, modification, or redistribution
+// of this source code MUST retain this copyright header, the original author attributions, and link back to the official repository.
 
 //@version=6
 indicator("Trend Duration Forecast - NODIVED", overlay = true, max_labels_count = 500, max_lines_count = 500, max_boxes_count = 300)
