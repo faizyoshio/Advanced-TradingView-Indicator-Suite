@@ -15,6 +15,7 @@ Both files use `indicator()`, not `strategy()`. They do not place broker-emulato
 ## 📑 Table of Contents
 
 - [🌟 Suite Overview](#-suite-overview)
+- [🔗 Source References & Attribution](#-source-references--attribution)
 - [✅ Validation Results](#-validation-results-2026-07-17)
 - [📦 Indicator 1: Dynamic ORB (MODIVED)](#-indicator-1-dynamic-orb-modived)
   - [⚡ Implemented Enhancements](#-implemented-enhancements)
@@ -40,6 +41,19 @@ Both files use `indicator()`, not `strategy()`. They do not place broker-emulato
 | :--- | :--- | :---: | :--- |
 | `Dynamic ORB - MODIVED.pine` | **Dynamic ORB - MODIVED** | `v6` | Multi-stage Opening Range Breakouts with heuristic quality scoring, synthetic risk planning, RSI divergence, and VWAP bands. |
 | `Trend Duration Forecast - MODIVED.pine` | **Trend Duration Forecast - NODIVED** (current internal title) | `v6` | Historical trend-duration summaries with ADX, coefficient-of-variation ratings, MTF context, and exhaustion warnings. |
+
+---
+
+## 🔗 Source References & Attribution
+
+Both indicators in this suite are modified (`MODIVED`) and enhanced versions built upon open-source or community Pine Script™ foundations on TradingView. We gratefully acknowledge the original authors and reference scripts:
+
+| Script in Suite | Original Base Indicator | Original Author | Source Reference Link |
+| :--- | :--- | :--- | :--- |
+| **Dynamic ORB - MODIVED** | **BIG & beautiful Dynamic ORB** | **Luxy** | [TradingView Script: AZUUpYlW](https://id.tradingview.com/script/AZUUpYlW-Luxy-BIG-beautiful-Dynamic-ORB/) |
+| **Trend Duration Forecast - MODIVED** | **Trend Duration Forecast** | **ChartPrime** | [TradingView Script: L3SJFfAQ](https://id.tradingview.com/script/L3SJFfAQ-Trend-Duration-Forecast-ChartPrime/) |
+
+*Note: All enhancements, localization, GOD MODE analytics, MTF checks, and risk calculation modifications (`MODIVED`) in this repository build upon these original concepts while retaining Pine Script™ v6 compatibility.*
 
 ---
 
@@ -84,7 +98,8 @@ Passing this smoke matrix proves that the scripts compiled and rendered in the r
 
 ## 📦 Indicator 1: Dynamic ORB (MODIVED)
 
-**File:** `Dynamic ORB - MODIVED.pine`
+**File:** `Dynamic ORB - MODIVED.pine`  
+**Base Reference:** [BIG & beautiful Dynamic ORB by Luxy](https://id.tradingview.com/script/AZUUpYlW-Luxy-BIG-beautiful-Dynamic-ORB/)
 
 The **Dynamic Opening Range Breakout (Dynamic ORB - MODIVED)** is a visual intraday analysis indicator that tracks opening ranges across **5, 15, 30, and 60-minute stages**. It adds configurable filters and synthetic entry/target/stop planning; it cannot eliminate false breakouts or execute orders.
 
@@ -176,7 +191,8 @@ The built-in calculator estimates position size from the configured risk and vis
 
 ## 📈 Indicator 2: Trend Duration Forecast (MODIVED)
 
-**File:** `Trend Duration Forecast - MODIVED.pine`
+**File:** `Trend Duration Forecast - MODIVED.pine`  
+**Base Reference:** [Trend Duration Forecast by ChartPrime](https://id.tradingview.com/script/L3SJFfAQ-Trend-Duration-Forecast-ChartPrime/)
 
 The **Trend Duration Forecast** tracks historical HMA-defined trend durations and compares the active trend with their averages. Its exhaustion zones are descriptive thresholds, not exact reversal forecasts.
 
